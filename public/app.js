@@ -614,7 +614,10 @@ async function reload() {
   state.departments = await store.departments();
   state.events = await store.events();
   state.audit = await store.audit();
-  const b = computeBounds(state.events);
+  // Bounds (and where "Not yet mapped" begins) follow the VISIBLE lanes only —
+  // hidden departments shouldn't stretch the timeline past the last shown event.
+  const hiddenDepts = new Set(state.departments.filter(d => d.hidden).map(d => d.id));
+  const b = computeBounds(state.events.filter(e => !hiddenDepts.has(e.department_id)));
   state.start = b.start; state.end = b.end; state.mappedEnd = b.mappedEnd;
   render();
   refreshDeptsBtn();
