@@ -7,6 +7,7 @@ const ROW_H = 30;
 const ZOOM = [1.6, 2.4, 3.6, 5.5, 8, 12];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+const LOCK_MSG = 'This event was marked as "dates locked in". Are you sure you\'d like to change it?';
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -254,7 +255,7 @@ function renderLane(dept, startDays, trackW, ticks, labelToday, unmapped) {
     const bg = ev.importance === 'minor'
       ? tint(base, 0.74)
       : (luminance(base) > 0.5 ? shade(base, 0.42) : base);
-    const bar = el('div', `bar ${ev.importance}${ev.wrap ? ' wrap' : ''}`);
+    const bar = el('div', `bar ${ev.importance}${ev.wrap ? ' wrap' : ''}${ev.locked ? ' locked' : ''}`);
     bar.dataset.id = ev.id;
     bar.style.left = (s - startDays) * state.px + 'px';
     bar.style.width = Math.max(8, (e - s) * state.px) + 'px';
@@ -285,7 +286,7 @@ function attachTooltip(bar, ev) {
     t.innerHTML = `<div class="tt-title">${esc(ev.title)}</div>
       <div class="tt-dates">${fmtDate(ev.start_date)} &rarr; ${fmtDate(ev.end_date)}</div>
       ${ev.note ? `<div class="tt-note">${esc(ev.note)}</div>` : ''}
-      <div class="tt-imp">${ev.importance}</div>`;
+      <div class="tt-imp">${ev.importance}${ev.locked ? ' · 🔒 dates locked' : ''}</div>`;
     t.classList.remove('hidden');
     moveTooltip(e);
   });
@@ -332,6 +333,7 @@ function wireDrag() {
     d.bar.classList.remove('dragging');
     const deltaDays = Math.round((e.clientX - d.startX) / state.px);
     if (d.moved < 4) { openEditor(d.ev); return; }
+    if (d.ev.locked && !confirm(LOCK_MSG)) { render(); return; }   // revert the drag
     const payload = { ...d.ev };
     if (d.isResize) payload.end_date = daysToISO(Math.max(d.sDays + 1, d.eDays + deltaDays));
     else { payload.start_date = daysToISO(d.sDays + deltaDays); payload.end_date = daysToISO(d.eDays + deltaDays); }
@@ -358,6 +360,7 @@ function openEditor(ev) {
   $('f-color-clear').checked = !hasColor;
   $('f-color').disabled = !hasColor;
   $('f-wrap').checked = !!ev?.wrap;
+  $('f-locked').checked = !!ev?.locked;
   $('f-note').value = ev?.note || '';
   $('f-delete').classList.toggle('hidden', !ev);
   $('form-error').textContent = '';
@@ -394,9 +397,12 @@ function wireForm() {
       importance: [...document.getElementsByName('imp')].find(r => r.checked).value,
       color: $('f-color-clear').checked ? null : $('f-color').value,
       wrap: $('f-wrap').checked,
+      locked: $('f-locked').checked,
       note: $('f-note').value.trim(),
     };
     if (toDays(payload.end_date) < toDays(payload.start_date)) { $('form-error').textContent = 'End date is before start date.'; return; }
+    const prev = payload.id ? state.events.find(e => e.id === payload.id) : null;
+    if (prev && prev.locked && (prev.start_date !== payload.start_date || prev.end_date !== payload.end_date) && !confirm(LOCK_MSG)) return;
     try { await commitSave(payload); $('panel').classList.add('hidden'); }
     catch (e) { $('form-error').textContent = e.message; }
   });

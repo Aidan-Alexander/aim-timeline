@@ -21,6 +21,7 @@ const e = (department_id, title, start_date, end_date, importance = 'major', ext
   department_id, title, start_date, end_date, importance,
   color: extra.color || null,
   wrap: extra.wrap || false,
+  locked: extra.locked || false,
   note: extra.note || '',
 });
 

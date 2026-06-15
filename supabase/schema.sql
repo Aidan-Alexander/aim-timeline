@@ -25,6 +25,7 @@ create table if not exists events (
   note          text default '',
   importance    text not null default 'major' check (importance in ('major','minor')),
   wrap          boolean not null default false,
+  locked        boolean not null default false,   -- "dates locked in": confirm before changing dates
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );
@@ -46,6 +47,13 @@ create table if not exists audit_log (
 );
 
 create index if not exists audit_ts_idx on audit_log(ts desc);
+
+-- Bring older databases up to date (no-ops on a fresh schema, since `create table`
+-- above already includes these columns). `create table if not exists` will NOT add
+-- columns to a table that already exists, so add them explicitly here.
+alter table departments add column if not exists hidden boolean not null default false;
+alter table events      add column if not exists wrap   boolean not null default false;
+alter table events      add column if not exists locked boolean not null default false;
 
 -- ---------------------------------------------------------------------------
 -- Change log: a trigger that diffs every write into audit_log.
@@ -117,11 +125,12 @@ begin
       note          = coalesce(payload->>'note',''),
       importance    = coalesce(payload->>'importance','major'),
       wrap          = coalesce((payload->>'wrap')::boolean, false),
+      locked        = coalesce((payload->>'locked')::boolean, false),
       updated_at    = now()
     where id = (payload->>'id')::uuid
     returning * into result;
   else
-    insert into events(department_id, title, start_date, end_date, color, note, importance, wrap)
+    insert into events(department_id, title, start_date, end_date, color, note, importance, wrap, locked)
     values (
       (payload->>'department_id')::int,
       payload->>'title',
@@ -130,7 +139,8 @@ begin
       nullif(payload->>'color',''),
       coalesce(payload->>'note',''),
       coalesce(payload->>'importance','major'),
-      coalesce((payload->>'wrap')::boolean, false)
+      coalesce((payload->>'wrap')::boolean, false),
+      coalesce((payload->>'locked')::boolean, false)
     )
     returning * into result;
   end if;

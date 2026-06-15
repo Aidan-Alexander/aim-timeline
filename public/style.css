@@ -103,6 +103,8 @@ body.editing .lane-label:hover { background: #eef1f6; }
 .bar .bar-label { overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .bar.major { font-weight: 650; box-shadow: 0 1px 2px rgba(0,0,0,.18), inset 0 0 0 1px rgba(255,255,255,.18); }
 .bar.minor { font-weight: 500; font-size: 11px; }
+/* "dates locked in": subtle dashed outline that adapts to the bar's text colour */
+.bar.locked { outline: 1.5px dashed currentColor; outline-offset: -3px; }
 /* wrap option: show the full title on up to two lines instead of truncating */
 .bar.wrap { white-space: normal; align-items: center; line-height: 1.12; padding-top: 2px; padding-bottom: 2px; }
 .bar.wrap .bar-label { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
