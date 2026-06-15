@@ -13,8 +13,7 @@ API below. **Editing needs the shared edit password** (see "Auth").
 
 ## Setup (once)
 
-1. **Site URL** — replace every `https://YOUR-SITE.netlify.app` below with your live
-   Netlify URL. (Reads don't need it; only writes do.)
+1. **Site** — already wired to the live site, `https://aim-timeline.netlify.app`.
 2. **Password** — put the shared edit password in your shell so it's never typed in
    plaintext or saved to history/files:
    ```bash
@@ -74,12 +73,12 @@ curl -s 'https://adivpzuiwuscvtziiptu.supabase.co/rest/v1/audit_log?select=ts,ac
 
 ## Write
 
-All writes: `POST https://YOUR-SITE.netlify.app/.netlify/functions/save-change`
+All writes: `POST https://aim-timeline.netlify.app/.netlify/functions/save-change`
 with `content-type: application/json`. Success → `{"ok":true,...}`.
 
 ### Add an event
 ```bash
-curl -s -X POST 'https://YOUR-SITE.netlify.app/.netlify/functions/save-change' \
+curl -s -X POST 'https://aim-timeline.netlify.app/.netlify/functions/save-change' \
   -H 'content-type: application/json' \
   -d '{
     "name": "YOUR NAME",
@@ -103,7 +102,7 @@ An update overwrites every field from `payload`, so **omitted fields get cleared
 Always GET the event first, change what you want, and send back all fields plus its `id`:
 ```bash
 # 1) fetch it (note the id), then 2) POST the complete object back:
-curl -s -X POST 'https://YOUR-SITE.netlify.app/.netlify/functions/save-change' \
+curl -s -X POST 'https://aim-timeline.netlify.app/.netlify/functions/save-change' \
   -H 'content-type: application/json' \
   -d '{
     "name": "YOUR NAME",
@@ -127,7 +126,7 @@ curl -s -X POST 'https://YOUR-SITE.netlify.app/.netlify/functions/save-change' \
 
 ### Delete an event
 ```bash
-curl -s -X POST 'https://YOUR-SITE.netlify.app/.netlify/functions/save-change' \
+curl -s -X POST 'https://aim-timeline.netlify.app/.netlify/functions/save-change' \
   -H 'content-type: application/json' \
   -d '{"name":"YOUR NAME","password":"'"$AIM_EDIT_PASSWORD"'","entity":"event","action":"delete","id":"PASTE-EVENT-UUID"}'
 ```
