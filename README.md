@@ -80,6 +80,12 @@ forged from the browser console.
 - Calendar runs one year past the last event; that span is shaded "Not yet mapped".
 - Full change log (who/what/when), filterable.
 
+## Driving it from Claude Code
+People with the edit password can change the timeline in natural language from
+Claude Code — e.g. *"Using API.md, add 'Board retreat' to Ops from 3–7 Mar 2027."*
+See [`API.md`](API.md) for the endpoints; the password is supplied at call time
+(from a shell variable), never stored in the repo.
+
 ## Notes / future
 - Concurrency is last-write-wins with the audit log as the safety net; Supabase
   Realtime can be added to live-refresh the board for simultaneous editors.
