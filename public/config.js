@@ -14,8 +14,8 @@ export const CONFIG = {
   // LOCAL DEMO ONLY: unlocks editing when running with no backend. This is NOT a
   // secret — it ships in the browser, so keep it a throwaway value (don't reuse the
   // real one here, especially in a public repo).
-  // The LIVE password is the EDIT_PASSWORD environment variable on Netlify
-  // (set it to "evafanclub"), checked server-side and never shipped to the browser.
+  // In LIVE mode this is ignored — the real password is the EDIT_PASSWORD env var
+  // on Netlify, checked server-side and never shipped to the browser.
   DEMO_PASSWORD: 'demo',
 };
 
