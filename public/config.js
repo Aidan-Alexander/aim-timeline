@@ -5,8 +5,8 @@
 // localStorage, no backend needed — great for trying the tool offline).
 // Fill both in to point at a real Supabase project.
 export const CONFIG = {
-  SUPABASE_URL: '',        // e.g. 'https://xxxx.supabase.co'
-  SUPABASE_ANON_KEY: '',   // the public anon key
+  SUPABASE_URL: 'https://adivpzuiwuscvtziiptu.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_0Q5HMBKvLVoU2Cwpb-cRvA_1OxIg3_p',  // public-safe (read-only via RLS)
 
   // Where the password-gated write function lives (Netlify).
   SAVE_ENDPOINT: '/.netlify/functions/save-change',
