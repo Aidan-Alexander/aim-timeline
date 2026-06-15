@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AIM Timeline</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="toolbar">
+    <div class="brand">
+      <span class="logo">▰</span>
+      <h1>AIM Timeline</h1>
+      <span id="mode-badge" class="mode-badge"></span>
+    </div>
+    <div class="tools">
+      <div class="zoom">
+        <button id="zoom-out" title="Zoom out">−</button>
+        <span id="zoom-label">Weeks</span>
+        <button id="zoom-in" title="Zoom in">+</button>
+      </div>
+      <button id="today-btn" class="ghost">Today</button>
+      <button id="depts-btn" class="ghost">Departments</button>
+      <button id="history-btn" class="ghost">History</button>
+      <button id="undo-btn" class="ghost hidden" disabled>↶ Undo</button>
+      <button id="add-dept-btn" class="ghost hidden">+ Department</button>
+      <button id="add-btn" class="primary hidden">+ Add event</button>
+      <button id="edit-btn" class="primary">Edit</button>
+    </div>
+  </header>
+
+  <div id="timeline-wrap" class="timeline-wrap">
+    <div id="timeline" class="timeline"><!-- rendered by app.js --></div>
+  </div>
+
+  <!-- Hover tooltip -->
+  <div id="tooltip" class="tooltip hidden"></div>
+
+  <!-- Show/hide departments (shared setting, stored on each department) -->
+  <div id="depts-panel" class="popover hidden">
+    <div class="popover-head">
+      <strong>Show departments</strong>
+      <button id="depts-all" class="linkbtn">Show all</button>
+    </div>
+    <ul id="depts-list" class="depts-list"></ul>
+    <p class="popover-note">Shared with everyone. Unlock editing to change.</p>
+  </div>
+
+  <!-- Edit / add side panel -->
+  <aside id="panel" class="panel hidden">
+    <div class="panel-head">
+      <h2 id="panel-title">Edit event</h2>
+      <button id="panel-close" class="icon">✕</button>
+    </div>
+    <form id="event-form" class="panel-body">
+      <input type="hidden" id="f-id" />
+      <label>Title<input type="text" id="f-title" required /></label>
+      <label>Department
+        <select id="f-dept"></select>
+      </label>
+      <div class="row">
+        <label>Start<input type="date" id="f-start" required /></label>
+        <label>End<input type="date" id="f-end" required /></label>
+      </div>
+      <fieldset class="importance">
+        <legend>Importance</legend>
+        <label class="radio"><input type="radio" name="imp" value="major" checked /> Major <small>(prominent)</small></label>
+        <label class="radio"><input type="radio" name="imp" value="minor" /> Minor <small>(muted)</small></label>
+      </fieldset>
+      <label>Colour (optional)<input type="color" id="f-color" /></label>
+      <label class="clear-color"><input type="checkbox" id="f-color-clear" /> Use department colour</label>
+      <label class="clear-color"><input type="checkbox" id="f-wrap" /> Wrap title onto a second line (don't truncate)</label>
+      <label>Note / comment<textarea id="f-note" rows="3"></textarea></label>
+      <div class="panel-actions">
+        <button type="button" id="f-delete" class="danger hidden">Delete</button>
+        <button type="submit" class="primary">Save</button>
+      </div>
+      <p id="form-error" class="form-error"></p>
+    </form>
+  </aside>
+
+  <!-- History drawer -->
+  <aside id="history" class="history hidden">
+    <div class="panel-head">
+      <h2>Change log</h2>
+      <button id="history-close" class="icon">✕</button>
+    </div>
+    <div class="history-filters">
+      <input type="search" id="history-search" placeholder="Filter by name, event…" />
+    </div>
+    <ul id="history-list" class="history-list"></ul>
+  </aside>
+
+  <!-- Department add/edit modal -->
+  <div id="dept-modal" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2 id="dept-modal-title">Add department</h2>
+      <input type="hidden" id="d-id" />
+      <label>Name<input type="text" id="d-name" /></label>
+      <label>Colour<input type="color" id="d-color" value="#5b4e9c" /></label>
+      <p id="dept-error" class="form-error"></p>
+      <div class="panel-actions">
+        <button id="dept-delete" class="danger hidden">Delete…</button>
+        <button id="dept-cancel" class="ghost">Cancel</button>
+        <button id="dept-save" class="primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Unlock modal -->
+  <div id="unlock" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2>Unlock editing</h2>
+      <p class="muted">Your name is attached to every change you make.</p>
+      <label>Your name<input type="text" id="u-name" autocomplete="name" /></label>
+      <label>Edit password<input type="password" id="u-pw" /></label>
+      <p id="unlock-error" class="form-error"></p>
+      <div class="panel-actions">
+        <button id="unlock-cancel" class="ghost">Cancel</button>
+        <button id="unlock-go" class="primary">Unlock</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

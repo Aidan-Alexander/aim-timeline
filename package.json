@@ -1,0 +1,14 @@
+{
+  "name": "aim-timeline",
+  "version": "1.0.0",
+  "description": "AIM big-picture timeline — a web replacement for the Gantt spreadsheet, with an automatic change log.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "netlify dev",
+    "seed": "node scripts/seed.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}

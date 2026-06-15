@@ -1,0 +1,8 @@
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+# Local dev: `netlify dev` serves /public and the function at
+# http://localhost:8888/.netlify/functions/save-change
+[dev]
+  publish = "public"
