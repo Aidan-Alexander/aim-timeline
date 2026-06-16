@@ -84,8 +84,9 @@ forged from the browser console.
 People with the edit password can change the timeline in plain English from Claude
 Code — e.g. *"Add 'Board retreat' to Ops from 3–7 Mar 2027."*
 
-- **On the site:** the **How to edit** button opens step-by-step instructions with a
-  copy-paste prompt — the easiest thing to share with non-technical colleagues.
+- **On the site:** the **Get Claude to make changes for you** button opens
+  step-by-step instructions with a copy-paste prompt — the easiest thing to share
+  with non-technical colleagues.
 - **No clone needed:** that prompt has Claude Code `WebFetch` the spec directly:
   > Read https://raw.githubusercontent.com/Aidan-Alexander/aim-timeline/master/API.md
   > and help me edit the AIM timeline. I'll give you the edit password when needed.
