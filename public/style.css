@@ -163,6 +163,17 @@ body:not(.editing) .bar .resize { display: none; }
 .modal input { padding: 9px; border: 1px solid var(--line-strong); border-radius: 8px; font: inherit; }
 .muted { color: var(--muted); margin: 0; font-size: 12px; }
 
+/* "How to edit with Claude Code" modal */
+.howto-modal { width: 480px; max-width: 92vw; }
+.howto-head { display: flex; align-items: center; justify-content: space-between; }
+.howto-head h2 { margin: 0; font-size: 18px; }
+.howto-steps { margin: 2px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 11px; font-size: 13.5px; }
+.howto-eg { margin: 7px 0 0; padding-left: 16px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+.copybox { display: flex; gap: 8px; align-items: stretch; margin-top: 7px; }
+.copybox code { flex: 1; background: #f3f5f9; border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; font-size: 12px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.copybox button { flex: none; align-self: flex-start; }
+.howto-modal a { color: var(--accent); }
+
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1c2230; color: #fff; padding: 10px 16px; border-radius: 10px; box-shadow: var(--shadow); z-index: 70; font-size: 13px; }
 
 /* Departments show/hide popover */

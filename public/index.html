@@ -22,6 +22,7 @@
       <button id="today-btn" class="ghost">Today</button>
       <button id="depts-btn" class="ghost">Departments</button>
       <button id="history-btn" class="ghost">History</button>
+      <button id="howto-btn" class="ghost">How to edit</button>
       <button id="undo-btn" class="ghost hidden" disabled>↶ Undo</button>
       <button id="add-dept-btn" class="ghost hidden">+ Department</button>
       <button id="add-btn" class="primary hidden">+ Add event</button>
@@ -105,6 +106,35 @@
         <button id="dept-cancel" class="ghost">Cancel</button>
         <button id="dept-save" class="primary">Save</button>
       </div>
+    </div>
+  </div>
+
+  <!-- How to edit with Claude Code -->
+  <div id="howto" class="modal-backdrop hidden">
+    <div class="modal howto-modal">
+      <div class="howto-head">
+        <h2>Edit this timeline with Claude Code</h2>
+        <button id="howto-close" class="icon">✕</button>
+      </div>
+      <p class="muted">Change the timeline by asking Claude Code in plain English — no spreadsheet, no code.</p>
+      <ol class="howto-steps">
+        <li>Open <strong>Claude Code</strong>.</li>
+        <li>Paste this to get started:
+          <div class="copybox">
+            <code id="howto-prompt">Read https://raw.githubusercontent.com/Aidan-Alexander/aim-timeline/master/API.md and help me edit the AIM timeline at https://aim-timeline.netlify.app. I'll give you the edit password when you need it.</code>
+            <button id="howto-copy" class="primary">Copy</button>
+          </div>
+        </li>
+        <li>Then just say what you want, for example:
+          <ul class="howto-eg">
+            <li>“Add ‘Board retreat’ to Ops from 3–7 March 2027”</li>
+            <li>“Move ‘AIM Connect’ to the week of 15 June”</li>
+            <li>“Hide the Founding To Give lane”</li>
+          </ul>
+        </li>
+      </ol>
+      <p class="muted">Claude makes the change and it shows up here, logged under your name. You'll need the shared <strong>edit password</strong> — ask the team if you don't have it.</p>
+      <p class="muted">Full reference: <a href="https://github.com/Aidan-Alexander/aim-timeline/blob/master/API.md" target="_blank" rel="noopener">API.md on GitHub</a>.</p>
     </div>
   </div>
 

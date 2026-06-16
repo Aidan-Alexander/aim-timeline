@@ -640,6 +640,14 @@ async function init() {
   $('undo-btn').addEventListener('click', doUndo);
   $('history-btn').addEventListener('click', () => { $('history').classList.toggle('hidden'); renderHistory($('history-search').value); });
   $('history-close').addEventListener('click', () => $('history').classList.add('hidden'));
+  $('howto-btn').addEventListener('click', () => $('howto').classList.remove('hidden'));
+  $('howto-close').addEventListener('click', () => $('howto').classList.add('hidden'));
+  $('howto').addEventListener('click', e => { if (e.target === $('howto')) $('howto').classList.add('hidden'); });
+  $('howto-copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText($('howto-prompt').textContent); $('howto-copy').textContent = 'Copied ✓'; }
+    catch { const r = document.createRange(); r.selectNode($('howto-prompt')); getSelection().removeAllRanges(); getSelection().addRange(r); $('howto-copy').textContent = 'Selected'; }
+    setTimeout(() => { $('howto-copy').textContent = 'Copy'; }, 1600);
+  });
   $('history-search').addEventListener('input', e => renderHistory(e.target.value));
   $('zoom-label').textContent = 'Weeks';
 

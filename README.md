@@ -81,10 +81,17 @@ forged from the browser console.
 - Full change log (who/what/when), filterable.
 
 ## Driving it from Claude Code
-People with the edit password can change the timeline in natural language from
-Claude Code — e.g. *"Using API.md, add 'Board retreat' to Ops from 3–7 Mar 2027."*
-See [`API.md`](API.md) for the endpoints; the password is supplied at call time
-(from a shell variable), never stored in the repo.
+People with the edit password can change the timeline in plain English from Claude
+Code — e.g. *"Add 'Board retreat' to Ops from 3–7 Mar 2027."*
+
+- **On the site:** the **How to edit** button opens step-by-step instructions with a
+  copy-paste prompt — the easiest thing to share with non-technical colleagues.
+- **No clone needed:** that prompt has Claude Code `WebFetch` the spec directly:
+  > Read https://raw.githubusercontent.com/Aidan-Alexander/aim-timeline/master/API.md
+  > and help me edit the AIM timeline. I'll give you the edit password when needed.
+- [`API.md`](API.md) is the full spec; [`CLAUDE.md`](CLAUDE.md) means Claude Code
+  auto-knows how to help when opened in this repo.
+- The password is supplied at call time (a shell variable), never stored in the repo.
 
 ## Notes / future
 - Concurrency is last-write-wins with the audit log as the safety net; Supabase
