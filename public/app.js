@@ -456,7 +456,7 @@ function setUnlocked(on) {
   $('add-dept-btn').classList.toggle('hidden', !on);
   $('undo-btn').classList.toggle('hidden', !on);
   refreshUndo();
-  $('edit-btn').textContent = on ? 'Lock' : 'Edit';
+  $('edit-btn').textContent = on ? 'Lock' : 'Edit manually';
 }
 
 // ---- departments ----------------------------------------------------------
