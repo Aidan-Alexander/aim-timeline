@@ -107,11 +107,30 @@ function computeBounds(events) {
   };
 }
 
-// per-event bar height (minor is shorter; wrapped titles need a second line)
+// Canvas text measurement: decide whether a "wrap"-enabled title actually needs a
+// second line at the current zoom. Without this, turning on wrap always reserved a
+// taller row even when the title comfortably fit on one line.
+const FONT_STACK = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+let _measureCtx = null;
+function measureTextWidth(text, font) {
+  if (!_measureCtx) _measureCtx = document.createElement('canvas').getContext('2d');
+  _measureCtx.font = font;
+  return _measureCtx.measureText(text || '').width;
+}
+function willWrap(ev) {
+  if (!ev.wrap) return false;
+  const s = toDays(ev.start_date), e = Math.max(toDays(ev.end_date), s + 1);
+  const avail = Math.max(8, (e - s) * state.px) - 15;   // bar width minus horizontal padding
+  const fs = ev.importance === 'minor' ? 11 : 12;
+  const fw = ev.importance === 'minor' ? 500 : 650;
+  return measureTextWidth(ev.title, `${fw} ${fs}px ${FONT_STACK}`) > avail;
+}
+
+// per-event bar height (minor is shorter; titles that actually wrap need a 2nd line)
 const ROW_GAP = 6, LANE_PAD = 6;
 function barHeight(ev) {
   const base = ev.importance === 'minor' ? 18 : 24;
-  return ev.wrap ? base + 15 : base;
+  return willWrap(ev) ? base + 15 : base;
 }
 
 // greedy interval packing with VARIABLE row heights: non-overlapping events share
@@ -208,12 +227,14 @@ function renderHeader(startDays, endDays, trackW, unmapped) {
 function renderLane(dept, startDays, trackW, ticks, labelToday, unmapped) {
   const lane = el('div', 'lane');
   const label = el('div', 'lane-label');
+  const grip = el('span', 'lane-grip'); grip.textContent = '⠿'; grip.title = 'Drag to reorder departments';
+  grip.addEventListener('click', ev => ev.stopPropagation());   // don't open the editor on a grip click
   const sw = el('span', 'swatch'); sw.style.background = dept.color;
   const nm = document.createElement('span'); nm.className = 'lane-name'; nm.textContent = dept.name;
   const hideBtn = el('span', 'lane-hide'); hideBtn.textContent = 'hide'; hideBtn.title = 'Hide this department for everyone';
   hideBtn.addEventListener('click', ev => { ev.stopPropagation(); requestHide(dept, true); });
   const pencil = el('span', 'lane-edit'); pencil.textContent = '✎'; pencil.title = 'Edit department';
-  label.append(sw, nm, hideBtn, pencil);
+  label.append(grip, sw, nm, hideBtn, pencil);
   label.addEventListener('click', () => { if (state.unlocked) openDeptEditor(dept); });
 
   const body = el('div', 'lane-body');
@@ -255,7 +276,7 @@ function renderLane(dept, startDays, trackW, ticks, labelToday, unmapped) {
     const bg = ev.importance === 'minor'
       ? tint(base, 0.74)
       : (luminance(base) > 0.5 ? shade(base, 0.42) : base);
-    const bar = el('div', `bar ${ev.importance}${ev.wrap ? ' wrap' : ''}${ev.locked ? ' locked' : ''}`);
+    const bar = el('div', `bar ${ev.importance}${willWrap(ev) ? ' wrap' : ''}${ev.locked ? ' locked' : ''}`);
     bar.dataset.id = ev.id;
     bar.style.left = (s - startDays) * state.px + 'px';
     bar.style.width = Math.max(8, (e - s) * state.px) + 'px';
@@ -305,6 +326,7 @@ function moveTooltip(e) {
 function wireDrag() {
   const tl = $('timeline');
   tl.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;            // ignore right/middle click (right-click opens the context menu)
     const bar = e.target.closest('.bar');
     if (!bar || !state.unlocked) return;
     const ev = state.events.find(x => x.id === bar.dataset.id);
@@ -341,6 +363,135 @@ function wireDrag() {
   });
 }
 
+// ---- right-click context menu on events -----------------------------------
+function closeContextMenu() { $('context-menu')?.remove(); }
+function showContextMenu(x, y, ev) {
+  closeContextMenu();
+  const menu = el('div', 'context-menu'); menu.id = 'context-menu';
+  const item = (label, fn) => { const b = el('button', 'ctx-item'); b.textContent = label; b.addEventListener('click', fn); menu.appendChild(b); };
+  item('Duplicate event', async () => { closeContextMenu(); await duplicateEvent(ev); });
+  item('Edit…', () => { closeContextMenu(); openEditor(ev); });
+  menu.style.left = x + 'px'; menu.style.top = y + 'px';
+  document.body.appendChild(menu);
+  const r = menu.getBoundingClientRect();   // clamp onto screen on both axes
+  menu.style.left = Math.max(4, Math.min(x, innerWidth - r.width - 4)) + 'px';
+  menu.style.top = Math.max(4, Math.min(y, innerHeight - r.height - 4)) + 'px';
+}
+async function duplicateEvent(ev) {
+  const { id, created_at, updated_at, ...rest } = ev;   // drop identity/timestamps → an insert
+  try {
+    const saved = await store.saveEvent({ ...rest }, state.name);
+    await reload();
+    if (saved) pushUndo(`duplicate "${saved.title}"`, async () => { await store.deleteEvent(saved.id, state.name); await reload(); });
+    toast('Duplicated');
+  } catch (e) { toast('⚠ ' + e.message); }
+}
+function wireContextMenu() {
+  const tl = $('timeline');
+  tl.addEventListener('contextmenu', e => {
+    const bar = e.target.closest('.bar');
+    if (!bar || !state.unlocked) return;
+    const ev = state.events.find(x => x.id === bar.dataset.id);
+    if (!ev) return;
+    e.preventDefault();
+    showContextMenu(e.clientX, e.clientY, ev);
+  });
+  document.addEventListener('pointerdown', e => { if (!e.target.closest('#context-menu')) closeContextMenu(); }, true);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeContextMenu(); });
+  $('timeline-wrap').addEventListener('scroll', closeContextMenu, true);
+}
+
+// ---- drag to reorder departments (lanes) ----------------------------------
+// In edit mode each lane label gets a grip handle. Dragging it lifts the lane
+// and shows a drop indicator; on release the new order is saved as each
+// department's `sort_order` (the same field the lanes are sorted by on load).
+let laneDrag = null;
+function positionDropIndicator(target) {
+  const d = laneDrag; if (!d) return;
+  const ind = $('drop-indicator'); if (!ind) return;
+  const n = d.offsets.length;
+  ind.style.top = (target < n ? d.offsets[target] : d.offsets[n - 1] + d.heights[n - 1]) + 'px';
+}
+function wireLaneReorder() {
+  const tl = $('timeline');
+  tl.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    const grip = e.target.closest('.lane-grip');
+    if (!grip || !state.unlocked) return;
+    const lane = grip.closest('.lane');
+    const lanes = [...tl.querySelectorAll('.lane')];
+    const fromIndex = lanes.indexOf(lane);
+    if (fromIndex === -1) return;
+    e.preventDefault(); e.stopPropagation();
+    laneDrag = {
+      lane, fromIndex, target: fromIndex, startY: e.clientY,
+      offsets: lanes.map(l => l.offsetTop),
+      heights: lanes.map(l => l.offsetHeight),
+      rects: lanes.map(l => l.getBoundingClientRect()),
+    };
+    grip.setPointerCapture(e.pointerId);
+    lane.classList.add('lane-dragging');
+    document.body.classList.add('reordering');
+    tooltip().classList.add('hidden');
+    const ind = el('div', 'drop-indicator'); ind.id = 'drop-indicator';
+    tl.appendChild(ind);
+    positionDropIndicator(fromIndex);
+  });
+  tl.addEventListener('pointermove', e => {
+    if (!laneDrag) return;
+    const d = laneDrag;
+    d.lane.style.transform = `translateY(${e.clientY - d.startY}px)`;
+    let target = d.rects.length;
+    for (let i = 0; i < d.rects.length; i++) {
+      const r = d.rects[i];
+      if (e.clientY < r.top + r.height / 2) { target = i; break; }
+    }
+    d.target = target;
+    positionDropIndicator(target);
+  });
+  const finish = async () => {
+    if (!laneDrag) return;
+    const d = laneDrag; laneDrag = null;
+    d.lane.style.transform = '';
+    d.lane.classList.remove('lane-dragging');
+    document.body.classList.remove('reordering');
+    $('drop-indicator')?.remove();
+    let to = d.target;
+    if (to > d.fromIndex) to -= 1;          // removing the dragged lane first shifts later targets up
+    if (to === d.fromIndex) return;          // dropped back where it started
+    const visible = state.departments.filter(x => !x.hidden);
+    const [moved] = visible.splice(d.fromIndex, 1);
+    visible.splice(to, 0, moved);
+    await commitReorder(visible);
+  };
+  tl.addEventListener('pointerup', finish);
+  tl.addEventListener('pointercancel', finish);
+}
+
+// Persist a new department order. `newVisibleOrder` is the desired order of the
+// visible lanes; hidden departments keep their slots. Only departments whose
+// sort_order actually changes are written (one logged change each).
+async function commitReorder(newVisibleOrder) {
+  const visibleIds = new Set(newVisibleOrder.map(d => d.id));
+  let vi = 0;
+  const newFull = state.departments.map(d => visibleIds.has(d.id) ? newVisibleOrder[vi++] : d);
+  const changes = [];
+  newFull.forEach((d, i) => {
+    const order = i + 1;
+    if (d.sort_order !== order) changes.push({ id: d.id, name: d.name, color: d.color, hidden: d.hidden, oldOrder: d.sort_order, newOrder: order });
+  });
+  if (!changes.length) return;
+  try {
+    for (const c of changes) await store.saveDepartment({ id: c.id, name: c.name, color: c.color, sort_order: c.newOrder, hidden: c.hidden }, state.name);
+    await reload();
+    pushUndo('reorder departments', async () => {
+      for (const c of changes) await store.saveDepartment({ id: c.id, name: c.name, color: c.color, sort_order: c.oldOrder, hidden: c.hidden }, state.name);
+      await reload();
+    });
+    toast('Reordered departments');
+  } catch (e) { toast('⚠ ' + e.message); await reload(); }
+}
+
 // ---- editing --------------------------------------------------------------
 function openEditor(ev) {
   $('panel-title').textContent = ev ? 'Edit event' : 'Add event';
@@ -353,6 +504,7 @@ function openEditor(ev) {
   sel.value = ev?.department_id || state.departments[0]?.id;
   $('f-start').value = ev?.start_date || daysToISO(todayDays());
   $('f-end').value = ev?.end_date || daysToISO(todayDays() + 7);
+  $('f-end').min = $('f-start').value;   // end picker can't go before the start, and opens on it
   for (const r of document.getElementsByName('imp')) r.checked = (r.value === (ev?.importance || 'major'));
   const deptColor = state.departments.find(d => d.id == (ev?.department_id || state.departments[0]?.id))?.color || '#3b5bdb';
   const hasColor = !!ev?.color;
@@ -380,6 +532,14 @@ async function commitSave(payload) {
 
 function wireForm() {
   $('f-color-clear').addEventListener('change', e => { $('f-color').disabled = e.target.checked; });
+  // When a start date is picked, the end-date selector starts from it (and the end
+  // jumps forward if it was empty or earlier than the new start).
+  $('f-start').addEventListener('change', () => {
+    const s = $('f-start').value;
+    if (!s) return;
+    $('f-end').min = s;
+    if (!$('f-end').value || toDays($('f-end').value) < toDays(s)) $('f-end').value = s;
+  });
   $('f-dept').addEventListener('change', () => {
     if ($('f-color-clear').checked) {
       const c = state.departments.find(d => d.id == $('f-dept').value)?.color;
@@ -632,7 +792,7 @@ async function init() {
 
   await reload();
 
-  wireDrag(); wireForm(); wireUnlock(); wireDept(); wireDepts();
+  wireDrag(); wireLaneReorder(); wireContextMenu(); wireForm(); wireUnlock(); wireDept(); wireDepts();
   $('zoom-in').addEventListener('click', () => setZoom(1));
   $('zoom-out').addEventListener('click', () => setZoom(-1));
   $('today-btn').addEventListener('click', scrollToToday);
