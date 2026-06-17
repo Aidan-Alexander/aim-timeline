@@ -8,7 +8,7 @@
   --line-month: #a7adb9;
   --accent: #3b5bdb;
   --danger: #d6336c;
-  --label-w: 168px;
+  --label-w: 220px;   /* JS overrides this responsively (see computeLabelW) */
   --header-h: 52px;
   --row-h: 30px;
   --shadow: 0 6px 24px rgba(20, 30, 60, .14);
@@ -75,7 +75,7 @@ button:active { transform: translateY(1px); }
   display: flex; align-items: center; gap: 8px; padding: 0 12px; font-weight: 600; font-size: 13px;
 }
 .lane-label .swatch { width: 10px; height: 22px; border-radius: 3px; flex: none; }
-.lane-label .lane-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.lane-label .lane-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lane-label .lane-hide { color: var(--muted); font-size: 11px; flex: none; cursor: pointer; }
 .lane-label .lane-hide:hover { color: var(--ink); text-decoration: underline; }
 .lane-label .lane-edit { color: var(--muted); font-size: 13px; flex: none; opacity: 0; cursor: pointer; display: none; }
@@ -195,7 +195,11 @@ body:not(.editing) .bar .resize { display: none; }
 /* Right-click context menu (events) */
 .context-menu { position: fixed; z-index: 80; min-width: 160px; background: var(--panel-bg); border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: var(--shadow); padding: 4px; }
 .context-menu .ctx-item { display: block; width: 100%; text-align: left; border: none; background: transparent; padding: 7px 10px; border-radius: 6px; font-size: 13px; color: var(--ink); }
-.context-menu .ctx-item:hover { background: #f3f5f9; }
+.context-menu .ctx-item:hover:not(:disabled) { background: #f3f5f9; }
+.context-menu .ctx-item:disabled { color: var(--muted); cursor: default; }
+.context-menu .ctx-item.danger { color: var(--danger); }
+.context-menu .ctx-item.danger:hover:not(:disabled) { background: #fdeaf1; }
+.context-menu .ctx-sep { height: 1px; background: var(--line); margin: 5px 4px; }
 
 /* Departments show/hide popover */
 .popover { position: fixed; top: 54px; right: 16px; z-index: 45; width: 248px; background: var(--panel-bg); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 8px 0; max-height: 70vh; overflow: auto; }

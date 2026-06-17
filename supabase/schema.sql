@@ -27,6 +27,7 @@ create table if not exists events (
   wrap          boolean not null default false,
   solo          boolean not null default false,   -- force this event onto its own row
   locked        boolean not null default false,   -- "dates locked in": confirm before changing dates
+  row_index     int,                              -- null => auto-pack; set => pinned to this row in its lane
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );
@@ -56,6 +57,7 @@ alter table departments add column if not exists hidden boolean not null default
 alter table events      add column if not exists wrap   boolean not null default false;
 alter table events      add column if not exists solo   boolean not null default false;
 alter table events      add column if not exists locked boolean not null default false;
+alter table events      add column if not exists row_index int;
 
 -- ---------------------------------------------------------------------------
 -- Change log: a trigger that diffs every write into audit_log.
@@ -129,11 +131,12 @@ begin
       wrap          = coalesce((payload->>'wrap')::boolean, false),
       solo          = coalesce((payload->>'solo')::boolean, false),
       locked        = coalesce((payload->>'locked')::boolean, false),
+      row_index     = nullif(payload->>'row_index','')::int,
       updated_at    = now()
     where id = (payload->>'id')::uuid
     returning * into result;
   else
-    insert into events(department_id, title, start_date, end_date, color, note, importance, wrap, solo, locked)
+    insert into events(department_id, title, start_date, end_date, color, note, importance, wrap, solo, locked, row_index)
     values (
       (payload->>'department_id')::int,
       payload->>'title',
@@ -144,7 +147,8 @@ begin
       coalesce(payload->>'importance','major'),
       coalesce((payload->>'wrap')::boolean, false),
       coalesce((payload->>'solo')::boolean, false),
-      coalesce((payload->>'locked')::boolean, false)
+      coalesce((payload->>'locked')::boolean, false),
+      nullif(payload->>'row_index','')::int
     )
     returning * into result;
   end if;

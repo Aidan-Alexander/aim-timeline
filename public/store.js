@@ -3,7 +3,7 @@
 import { CONFIG, IS_LIVE } from './config.js';
 import { SEED_DEPARTMENTS, SEED_EVENTS } from './data/seed.js';
 
-const AUDIT_FIELDS = ['department_id', 'title', 'start_date', 'end_date', 'color', 'note', 'importance', 'wrap', 'solo', 'locked'];
+const AUDIT_FIELDS = ['department_id', 'title', 'start_date', 'end_date', 'color', 'note', 'importance', 'wrap', 'solo', 'locked', 'row_index'];
 const DEPT_AUDIT_FIELDS = ['name', 'color', 'sort_order', 'hidden'];
 
 // --------------------------------------------------------------------------

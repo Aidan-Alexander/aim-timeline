@@ -23,6 +23,7 @@ const e = (department_id, title, start_date, end_date, importance = 'major', ext
   wrap: extra.wrap || false,
   solo: extra.solo || false,
   locked: extra.locked || false,
+  row_index: extra.row_index ?? null,
   note: extra.note || '',
 });
 

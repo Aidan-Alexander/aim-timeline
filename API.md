@@ -39,7 +39,8 @@ API below. **Editing needs the shared edit password** (see "Auth").
 **events**: `id` (uuid), `department_id` (int), `title`, `start_date` (YYYY-MM-DD),
 `end_date` (YYYY-MM-DD), `color` (hex like `#3F9D57`, or null = use lane colour),
 `note`, `importance` (`major` | `minor`), `wrap` (bool), `solo` (bool — force onto
-its own row), `locked` (bool — confirm before date changes).
+its own row), `locked` (bool — confirm before date changes), `row_index` (int or
+null — null = auto-place; a number pins the event to that row in its lane, `0` = top).
 
 **departments**: `id` (int), `name`, `color` (hex), `sort_order` (int), `hidden` (bool).
 
@@ -95,7 +96,8 @@ curl -s -X POST 'https://aim-timeline.netlify.app/.netlify/functions/save-change
   }'
 ```
 Optional `payload` fields: `note`, `color` (omit/null = lane colour), `importance`
-(`major` default | `minor`), `wrap` (bool), `solo` (bool), `locked` (bool).
+(`major` default | `minor`), `wrap` (bool), `solo` (bool), `locked` (bool),
+`row_index` (int or null).
 
 ### Edit an event — IMPORTANT: send the FULL event
 An update overwrites every field from `payload`, so **omitted fields get cleared**.
@@ -119,7 +121,9 @@ curl -s -X POST 'https://aim-timeline.netlify.app/.netlify/functions/save-change
       "note": "",
       "importance": "major",
       "wrap": false,
-      "locked": false
+      "solo": false,
+      "locked": false,
+      "row_index": null
     }
   }'
 ```

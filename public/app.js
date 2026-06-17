@@ -2,8 +2,8 @@ import { store, MODE } from './store.js';
 import { CONFIG } from './config.js';
 
 // ---- constants ------------------------------------------------------------
-const LABEL_W = 168;
 const ROW_H = 30;
+const LABEL_MIN = 130, LABEL_MAX = 420;   // department-column width clamp (content-sized in computeLabelW)
 const ZOOM = [1.6, 2.4, 3.6, 5.5, 8, 12];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -52,6 +52,7 @@ const state = {
   departments: [], events: [], audit: [],
   start: '2025-12-01', end: '2027-12-01', mappedEnd: '2026-12-31',
   zoom: 2, px: ZOOM[2],
+  labelW: 220,   // recomputed from department names in applyLabelW()
   unlocked: false, name: '',
 };
 
@@ -126,6 +127,25 @@ function willWrap(ev) {
   return measureTextWidth(ev.title, `${fw} ${fs}px ${FONT_STACK}`) > avail;
 }
 
+// The department (label) column is sized to its CONTENT — just wide enough for the
+// longest department name — then it stops growing, clamped to a floor/ceiling. The
+// ceiling tracks the viewport too, so a narrow phone truncates (ellipsis) instead of
+// being swallowed by the column. Width also lives in --label-w so the sticky header
+// and lanes match exactly. Recomputed in reload() and on resize.
+function computeLabelW() {
+  let widest = 0;
+  for (const d of (state.departments || [])) widest = Math.max(widest, measureTextWidth(d.name, '600 13px ' + FONT_STACK));
+  // chrome around the name: L/R padding + grip + swatch + gaps + the "hide" link + edit pencil
+  const chrome = 12 + 14 + 10 + 8 * 4 + measureTextWidth('hide', '11px ' + FONT_STACK) + measureTextWidth('✎', '13px ' + FONT_STACK) + 12 + 6;
+  const ceiling = Math.min(LABEL_MAX, Math.round(window.innerWidth * 0.4));
+  const floor = Math.min(LABEL_MIN, ceiling);
+  return Math.round(Math.max(floor, Math.min(ceiling, widest + chrome)));
+}
+function applyLabelW() {
+  state.labelW = computeLabelW();
+  document.documentElement.style.setProperty('--label-w', state.labelW + 'px');
+}
+
 // per-event bar height (minor is shorter; titles that actually wrap need a 2nd line)
 const ROW_GAP = 6, LANE_PAD = 6;
 function barHeight(ev) {
@@ -133,26 +153,47 @@ function barHeight(ev) {
   return willWrap(ev) ? base + 15 : base;
 }
 
-// greedy interval packing with VARIABLE row heights. Major events are laid out
-// FIRST (packed into as few rows as possible, at the TOP of the lane); minor events
-// then fill rows below them. Majors and minors never share a row, and an event
-// flagged `solo` gets a dedicated row no one else shares. Each row is as tall as its
-// tallest bar.
+// Row layout with VARIABLE row heights. Events the user has PINNED (row_index set,
+// via drag or the right-click menu) claim their exact row first. The rest auto-pack:
+// major events laid out FIRST (toward the TOP), minors below them; majors and minors
+// never share a row, and a `solo` event gets a dedicated row. With nothing pinned this
+// is exactly the majors-above-minors packing; pins just override where chosen events go.
 function layoutLane(events) {
   const byStart = (a, b) => toDays(a.start_date) - toDays(b.start_date) || toDays(a.end_date) - toDays(b.end_date);
-  const rows = [];            // { endDay, height, solo, minor }
+  const rows = [];            // { endDay, height, solo, minor, pinned, placeholder }
   const rowOf = {};
+  const pinned = events.filter(ev => ev.row_index != null);
+  const auto = events.filter(ev => ev.row_index == null);
+
+  // 1) pinned events claim their explicit row index (rows above a high pin become
+  //    empty placeholders that auto events can later fill).
+  if (pinned.length) {
+    const ensureRow = i => { while (rows.length <= i) rows.push({ endDay: -Infinity, height: 24, placeholder: true }); };
+    for (const ev of [...pinned].sort(byStart)) {
+      const s = toDays(ev.start_date), e = Math.max(toDays(ev.end_date), s + 1);
+      const h = barHeight(ev), i = Math.max(0, ev.row_index | 0);
+      ensureRow(i);
+      const r = rows[i];
+      if (r.placeholder) { r.placeholder = false; r.pinned = true; r.endDay = e; r.height = h; r.minor = ev.importance === 'minor'; }
+      else { r.endDay = Math.max(r.endDay, e); r.height = Math.max(r.height, h); }
+      if (ev.solo) r.solo = true;
+      rowOf[ev.id] = i;
+    }
+  }
+
+  // 2) auto events: majors first (toward the top), then minors.
   const place = (ev, minor) => {
     const s = toDays(ev.start_date), e = Math.max(toDays(ev.end_date), s + 1);
     const h = barHeight(ev);
     if (ev.solo) { rowOf[ev.id] = rows.length; rows.push({ endDay: e, height: h, solo: true, minor }); return; }
-    let i = rows.findIndex(r => !r.solo && r.minor === minor && s >= r.endDay);   // reuse only a same-tier, non-solo row
-    if (i === -1) { i = rows.length; rows.push({ endDay: e, height: h, minor }); }
-    else { rows[i].endDay = e; rows[i].height = Math.max(rows[i].height, h); }
-    rowOf[ev.id] = i;
+    let i = rows.findIndex(r => !r.solo && !r.pinned && !r.placeholder && r.minor === minor && s >= r.endDay);   // share a same-tier row
+    if (i !== -1) { rows[i].endDay = e; rows[i].height = Math.max(rows[i].height, h); rowOf[ev.id] = i; return; }
+    i = rows.findIndex(r => r.placeholder);   // else fill an empty gap row left above a high pin
+    if (i !== -1) { rows[i] = { endDay: e, height: h, minor }; rowOf[ev.id] = i; return; }
+    rowOf[ev.id] = rows.length; rows.push({ endDay: e, height: h, minor });   // else a new row at the bottom
   };
-  events.filter(ev => ev.importance !== 'minor').sort(byStart).forEach(ev => place(ev, false));
-  events.filter(ev => ev.importance === 'minor').sort(byStart).forEach(ev => place(ev, true));
+  auto.filter(ev => ev.importance !== 'minor').sort(byStart).forEach(ev => place(ev, false));
+  auto.filter(ev => ev.importance === 'minor').sort(byStart).forEach(ev => place(ev, true));
   if (!rows.length) rows.push({ endDay: 0, height: 24 });
   const rowY = []; let y = LANE_PAD;
   for (const r of rows) { rowY.push(y); y += r.height + ROW_GAP; }
@@ -166,7 +207,7 @@ function render() {
   const startDays = toDays(state.start), endDays = toDays(state.end);
   const totalDays = endDays - startDays;
   const trackW = totalDays * state.px;
-  tl.style.width = (LABEL_W + trackW) + 'px';
+  tl.style.width = (state.labelW + trackW) + 'px';
 
   // ticks: month boundaries (strong) + Mondays (light)
   const ticks = [];
@@ -328,7 +369,18 @@ function moveTooltip(e) {
   t.style.left = x + 'px'; t.style.top = y + 'px';
 }
 
-// ---- drag to move / resize -----------------------------------------------
+// ---- drag to move / resize / re-row --------------------------------------
+// Which row did the cursor land on within a lane body? Returns an index into the
+// lane's rows, or rows.length to mean "a new row below everything".
+function rowAtY(layout, offsetY) {
+  for (let i = 0; i < layout.rows.length; i++) {
+    if (offsetY < layout.rowY[i] + layout.rows[i].height) return i;
+  }
+  const last = layout.rows.length - 1;
+  const lastBot = layout.rowY[last] + layout.rows[last].height;
+  return offsetY > lastBot + ROW_GAP ? layout.rows.length : last;
+}
+
 function wireDrag() {
   const tl = $('timeline');
   tl.addEventListener('pointerdown', e => {
@@ -337,11 +389,13 @@ function wireDrag() {
     if (!bar || !state.unlocked) return;
     const ev = state.events.find(x => x.id === bar.dataset.id);
     if (!ev) return;
+    const body = bar.closest('.lane-body');
+    const layout = layoutLane(state.events.filter(x => x.department_id === ev.department_id));
     drag = {
-      bar, ev, isResize: e.target.classList.contains('resize'),
-      startX: e.clientX, moved: 0,
-      origLeft: parseFloat(bar.style.left), origW: parseFloat(bar.style.width),
-      sDays: toDays(ev.start_date), eDays: toDays(ev.end_date),
+      bar, ev, body, layout, isResize: e.target.classList.contains('resize'),
+      startX: e.clientX, startY: e.clientY, moved: 0,
+      origLeft: parseFloat(bar.style.left), origTop: parseFloat(bar.style.top), origW: parseFloat(bar.style.width),
+      sDays: toDays(ev.start_date), eDays: toDays(ev.end_date), startRow: layout.rowOf[ev.id] ?? 0,
     };
     bar.setPointerCapture(e.pointerId);
     bar.classList.add('dragging');
@@ -350,10 +404,11 @@ function wireDrag() {
   });
   tl.addEventListener('pointermove', e => {
     if (!drag) return;
-    const dx = e.clientX - drag.startX;
-    drag.moved = Math.max(drag.moved, Math.abs(dx));
-    if (drag.isResize) drag.bar.style.width = Math.max(8, drag.origW + dx) + 'px';
-    else drag.bar.style.left = (drag.origLeft + dx) + 'px';
+    const dx = e.clientX - drag.startX, dy = e.clientY - drag.startY;
+    drag.moved = Math.max(drag.moved, Math.abs(dx), Math.abs(dy));
+    if (drag.isResize) { drag.bar.style.width = Math.max(8, drag.origW + dx) + 'px'; return; }
+    drag.bar.style.left = (drag.origLeft + dx) + 'px';
+    drag.bar.style.top = (drag.origTop + dy) + 'px';   // follow vertically too (snaps to a row on drop)
   });
   tl.addEventListener('pointerup', async e => {
     if (!drag) return;
@@ -363,8 +418,15 @@ function wireDrag() {
     if (d.moved < 4) { openEditor(d.ev); return; }
     if (d.ev.locked && !confirm(LOCK_MSG)) { render(); return; }   // revert the drag
     const payload = { ...d.ev };
-    if (d.isResize) payload.end_date = daysToISO(Math.max(d.sDays + 1, d.eDays + deltaDays));
-    else { payload.start_date = daysToISO(d.sDays + deltaDays); payload.end_date = daysToISO(d.eDays + deltaDays); }
+    if (d.isResize) {
+      payload.end_date = daysToISO(Math.max(d.sDays + 1, d.eDays + deltaDays));
+    } else {
+      payload.start_date = daysToISO(d.sDays + deltaDays);
+      payload.end_date = daysToISO(d.eDays + deltaDays);
+      // vertical move → pin to the row it was dropped on (only when it actually changed)
+      const targetRow = rowAtY(d.layout, e.clientY - d.body.getBoundingClientRect().top);
+      if (targetRow !== d.startRow) payload.row_index = targetRow;
+    }
     await commitSave(payload);
   });
 }
@@ -374,9 +436,25 @@ function closeContextMenu() { $('context-menu')?.remove(); }
 function showContextMenu(x, y, ev) {
   closeContextMenu();
   const menu = el('div', 'context-menu'); menu.id = 'context-menu';
-  const item = (label, fn) => { const b = el('button', 'ctx-item'); b.textContent = label; b.addEventListener('click', fn); menu.appendChild(b); };
-  item('Duplicate event', async () => { closeContextMenu(); await duplicateEvent(ev); });
+  const item = (label, fn, opts = {}) => {
+    const b = el('button', 'ctx-item' + (opts.danger ? ' danger' : ''));
+    b.textContent = label;
+    if (opts.disabled) b.disabled = true; else b.addEventListener('click', fn);
+    menu.appendChild(b);
+  };
+  const sep = () => menu.appendChild(el('div', 'ctx-sep'));
+  const cur = layoutLane(state.events.filter(e => e.department_id === ev.department_id)).rowOf[ev.id] ?? 0;
   item('Edit…', () => { closeContextMenu(); openEditor(ev); });
+  item('Duplicate event', async () => { closeContextMenu(); await duplicateEvent(ev); });
+  sep();
+  item('↑ Move up a row', () => { closeContextMenu(); setEventRow(ev, cur - 1); }, { disabled: cur <= 0 });
+  item('↓ Move down a row', () => { closeContextMenu(); setEventRow(ev, cur + 1); });
+  item('Reset to automatic row', () => { closeContextMenu(); setEventRow(ev, null); }, { disabled: ev.row_index == null });
+  sep();
+  item('Delete', async () => {
+    closeContextMenu();
+    if (confirm(`Delete "${ev.title}"?`)) { try { await removeEvent(ev); toast('Deleted'); } catch (e) { toast('⚠ ' + e.message); } }
+  }, { danger: true });
   menu.style.left = x + 'px'; menu.style.top = y + 'px';
   document.body.appendChild(menu);
   const r = menu.getBoundingClientRect();   // clamp onto screen on both axes
@@ -391,6 +469,15 @@ async function duplicateEvent(ev) {
     if (saved) pushUndo(`duplicate "${saved.title}"`, async () => { await store.deleteEvent(saved.id, state.name); await reload(); });
     toast('Duplicated');
   } catch (e) { toast('⚠ ' + e.message); }
+}
+async function setEventRow(ev, rowIndex) {
+  try { await commitSave({ ...ev, row_index: rowIndex }); } catch { /* commitSave already toasts */ }
+}
+async function removeEvent(ev) {
+  const snap = clone(ev);
+  await store.deleteEvent(ev.id, state.name);
+  await reload();
+  pushUndo(`delete "${snap.title}"`, async () => { const { id: _d, ...rest } = snap; await store.saveEvent(rest, state.name); await reload(); });
 }
 function wireContextMenu() {
   const tl = $('timeline');
@@ -502,6 +589,7 @@ async function commitReorder(newVisibleOrder) {
 function openEditor(ev) {
   $('panel-title').textContent = ev ? 'Edit event' : 'Add event';
   $('f-id').value = ev?.id || '';
+  $('f-row').value = ev?.row_index ?? '';   // preserved across edits (set by drag / right-click)
   $('f-title').value = ev?.title || '';
   const sel = $('f-dept'); sel.innerHTML = '';
   for (const d of state.departments) {
@@ -566,6 +654,7 @@ function wireForm() {
       wrap: $('f-wrap').checked,
       solo: $('f-solo').checked,
       locked: $('f-locked').checked,
+      row_index: $('f-row').value === '' ? null : Number($('f-row').value),
       note: $('f-note').value.trim(),
     };
     if (toDays(payload.end_date) < toDays(payload.start_date)) { $('form-error').textContent = 'End date is before start date.'; return; }
@@ -577,10 +666,9 @@ function wireForm() {
   $('f-delete').addEventListener('click', async () => {
     const id = $('f-id').value;
     if (!id || !confirm('Delete this event?')) return;
-    const ev = clone(state.events.find(e => e.id === id));
+    const ev = state.events.find(e => e.id === id);
     try {
-      await store.deleteEvent(id, state.name); await reload();
-      if (ev) pushUndo(`delete "${ev.title}"`, async () => { const { id: _drop, ...rest } = ev; await store.saveEvent(rest, state.name); await reload(); });
+      await removeEvent(ev);
       $('panel').classList.add('hidden'); toast('Deleted');
     } catch (e) { $('form-error').textContent = e.message; }
   });
@@ -595,7 +683,7 @@ function fmtVal(field, v) {
   if (field === 'department_id') return deptName(v);
   return v;
 }
-const PRETTY = { start_date: 'start', end_date: 'end', department_id: 'department', importance: 'importance', title: 'title', color: 'colour', note: 'note', wrap: 'wrap', solo: 'own row', locked: 'locked dates' };
+const PRETTY = { start_date: 'start', end_date: 'end', department_id: 'department', importance: 'importance', title: 'title', color: 'colour', note: 'note', wrap: 'wrap', solo: 'own row', locked: 'locked dates', row_index: 'row' };
 
 function renderHistory(filter = '') {
   const list = $('history-list'); list.innerHTML = '';
@@ -769,12 +857,12 @@ function scrollToToday() {
 }
 function setZoom(delta) {
   const wrap = $('timeline-wrap'), startDays = toDays(state.start);
-  const centerDays = startDays + (wrap.scrollLeft + wrap.clientWidth / 2 - LABEL_W) / state.px;
+  const centerDays = startDays + (wrap.scrollLeft + wrap.clientWidth / 2 - state.labelW) / state.px;
   state.zoom = Math.max(0, Math.min(ZOOM.length - 1, state.zoom + delta));
   state.px = ZOOM[state.zoom];
   $('zoom-label').textContent = state.px < 2.5 ? 'Months' : state.px < 6 ? 'Weeks' : 'Days';
   render();
-  wrap.scrollLeft = (centerDays - startDays) * state.px + LABEL_W - wrap.clientWidth / 2;
+  wrap.scrollLeft = (centerDays - startDays) * state.px + state.labelW - wrap.clientWidth / 2;
 }
 
 // ---- boot -----------------------------------------------------------------
@@ -782,6 +870,7 @@ async function reload() {
   state.departments = await store.departments();
   state.events = await store.events();
   state.audit = await store.audit();
+  applyLabelW();   // size the label column to the (possibly changed) department names
   // Bounds (and where "Not yet mapped" begins) follow the VISIBLE lanes only —
   // hidden departments shouldn't stretch the timeline past the last shown event.
   const hiddenDepts = new Set(state.departments.filter(d => d.hidden).map(d => d.id));
@@ -801,6 +890,9 @@ async function init() {
   await reload();
 
   wireDrag(); wireLaneReorder(); wireContextMenu(); wireForm(); wireUnlock(); wireDept(); wireDepts();
+  // the column's viewport cap can change on rotate/resize → recompute width + repaint
+  let rAF;
+  window.addEventListener('resize', () => { cancelAnimationFrame(rAF); rAF = requestAnimationFrame(() => { applyLabelW(); render(); }); });
   $('zoom-in').addEventListener('click', () => setZoom(1));
   $('zoom-out').addEventListener('click', () => setZoom(-1));
   $('today-btn').addEventListener('click', scrollToToday);
