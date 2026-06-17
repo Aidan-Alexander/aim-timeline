@@ -133,20 +133,26 @@ function barHeight(ev) {
   return willWrap(ev) ? base + 15 : base;
 }
 
-// greedy interval packing with VARIABLE row heights: non-overlapping events share
-// a row, clashes spill down; each row is as tall as its tallest bar.
+// greedy interval packing with VARIABLE row heights. Major events are laid out
+// FIRST (packed into as few rows as possible, at the TOP of the lane); minor events
+// then fill rows below them. Majors and minors never share a row, and an event
+// flagged `solo` gets a dedicated row no one else shares. Each row is as tall as its
+// tallest bar.
 function layoutLane(events) {
-  const sorted = [...events].sort((a, b) => toDays(a.start_date) - toDays(b.start_date) || toDays(a.end_date) - toDays(b.end_date));
-  const rows = [];            // { endDay, height }
+  const byStart = (a, b) => toDays(a.start_date) - toDays(b.start_date) || toDays(a.end_date) - toDays(b.end_date);
+  const rows = [];            // { endDay, height, solo, minor }
   const rowOf = {};
-  for (const ev of sorted) {
+  const place = (ev, minor) => {
     const s = toDays(ev.start_date), e = Math.max(toDays(ev.end_date), s + 1);
     const h = barHeight(ev);
-    let i = rows.findIndex(r => s >= r.endDay);
-    if (i === -1) { i = rows.length; rows.push({ endDay: e, height: h }); }
+    if (ev.solo) { rowOf[ev.id] = rows.length; rows.push({ endDay: e, height: h, solo: true, minor }); return; }
+    let i = rows.findIndex(r => !r.solo && r.minor === minor && s >= r.endDay);   // reuse only a same-tier, non-solo row
+    if (i === -1) { i = rows.length; rows.push({ endDay: e, height: h, minor }); }
     else { rows[i].endDay = e; rows[i].height = Math.max(rows[i].height, h); }
     rowOf[ev.id] = i;
-  }
+  };
+  events.filter(ev => ev.importance !== 'minor').sort(byStart).forEach(ev => place(ev, false));
+  events.filter(ev => ev.importance === 'minor').sort(byStart).forEach(ev => place(ev, true));
   if (!rows.length) rows.push({ endDay: 0, height: 24 });
   const rowY = []; let y = LANE_PAD;
   for (const r of rows) { rowY.push(y); y += r.height + ROW_GAP; }
@@ -512,6 +518,7 @@ function openEditor(ev) {
   $('f-color-clear').checked = !hasColor;
   $('f-color').disabled = !hasColor;
   $('f-wrap').checked = !!ev?.wrap;
+  $('f-solo').checked = !!ev?.solo;
   $('f-locked').checked = !!ev?.locked;
   $('f-note').value = ev?.note || '';
   $('f-delete').classList.toggle('hidden', !ev);
@@ -557,6 +564,7 @@ function wireForm() {
       importance: [...document.getElementsByName('imp')].find(r => r.checked).value,
       color: $('f-color-clear').checked ? null : $('f-color').value,
       wrap: $('f-wrap').checked,
+      solo: $('f-solo').checked,
       locked: $('f-locked').checked,
       note: $('f-note').value.trim(),
     };
@@ -587,7 +595,7 @@ function fmtVal(field, v) {
   if (field === 'department_id') return deptName(v);
   return v;
 }
-const PRETTY = { start_date: 'start', end_date: 'end', department_id: 'department', importance: 'importance', title: 'title', color: 'colour', note: 'note' };
+const PRETTY = { start_date: 'start', end_date: 'end', department_id: 'department', importance: 'importance', title: 'title', color: 'colour', note: 'note', wrap: 'wrap', solo: 'own row', locked: 'locked dates' };
 
 function renderHistory(filter = '') {
   const list = $('history-list'); list.innerHTML = '';

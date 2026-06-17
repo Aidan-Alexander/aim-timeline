@@ -25,6 +25,7 @@ create table if not exists events (
   note          text default '',
   importance    text not null default 'major' check (importance in ('major','minor')),
   wrap          boolean not null default false,
+  solo          boolean not null default false,   -- force this event onto its own row
   locked        boolean not null default false,   -- "dates locked in": confirm before changing dates
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
@@ -53,6 +54,7 @@ create index if not exists audit_ts_idx on audit_log(ts desc);
 -- columns to a table that already exists, so add them explicitly here.
 alter table departments add column if not exists hidden boolean not null default false;
 alter table events      add column if not exists wrap   boolean not null default false;
+alter table events      add column if not exists solo   boolean not null default false;
 alter table events      add column if not exists locked boolean not null default false;
 
 -- ---------------------------------------------------------------------------
@@ -125,12 +127,13 @@ begin
       note          = coalesce(payload->>'note',''),
       importance    = coalesce(payload->>'importance','major'),
       wrap          = coalesce((payload->>'wrap')::boolean, false),
+      solo          = coalesce((payload->>'solo')::boolean, false),
       locked        = coalesce((payload->>'locked')::boolean, false),
       updated_at    = now()
     where id = (payload->>'id')::uuid
     returning * into result;
   else
-    insert into events(department_id, title, start_date, end_date, color, note, importance, wrap, locked)
+    insert into events(department_id, title, start_date, end_date, color, note, importance, wrap, solo, locked)
     values (
       (payload->>'department_id')::int,
       payload->>'title',
@@ -140,6 +143,7 @@ begin
       coalesce(payload->>'note',''),
       coalesce(payload->>'importance','major'),
       coalesce((payload->>'wrap')::boolean, false),
+      coalesce((payload->>'solo')::boolean, false),
       coalesce((payload->>'locked')::boolean, false)
     )
     returning * into result;
