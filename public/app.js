@@ -463,6 +463,8 @@ function showContextMenu(x, y, ev) {
 }
 async function duplicateEvent(ev) {
   const { id, created_at, updated_at, ...rest } = ev;   // drop identity/timestamps → an insert
+  rest.row_index = null;   // auto-place the copy on its own row. Inheriting a pinned row_index
+                           // would stack the duplicate exactly on top of the original (invisible).
   try {
     const saved = await store.saveEvent({ ...rest }, state.name);
     await reload();
