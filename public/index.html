@@ -157,6 +157,9 @@
 
   <div id="toast" class="toast hidden"></div>
 
+  <!-- Supabase client, vendored locally (sets window.supabase). Served from our own
+       origin so the app never waits on a third-party CDN to load. -->
+  <script src="vendor/supabase.umd.js"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>

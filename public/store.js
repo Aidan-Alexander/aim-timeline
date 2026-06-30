@@ -109,8 +109,13 @@ class SupabaseStore {
   constructor() { this.mode = 'live'; this._client = null; }
   async client() {
     if (!this._client) {
-      const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
-      this._client = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+      // supabase-js is vendored locally and exposed as window.supabase by a <script>
+      // tag in index.html (public/vendor/supabase.umd.js). We deliberately do NOT
+      // import it from a third-party CDN at runtime — that fan-out of cross-origin
+      // requests on every page load was the cause of occasional slow/failed loads.
+      const lib = globalThis.supabase;
+      if (!lib?.createClient) throw new Error('Supabase library failed to load — please refresh.');
+      this._client = lib.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
     }
     return this._client;
   }

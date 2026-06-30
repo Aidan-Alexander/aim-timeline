@@ -334,6 +334,19 @@ function renderLane(dept, startDays, trackW, ticks, labelToday, unmapped) {
     if (ev.importance === 'minor') bar.style.boxShadow = 'inset 0 0 0 1px ' + tint(base, 0.35);
     const lbl = el('span', 'bar-label'); lbl.textContent = ev.title;
     bar.appendChild(lbl);
+    // Row controls (visible on hover in edit mode) — the discoverable way to move an
+    // event up/down a row, since dragging is horizontal-only now. Mirrors the
+    // right-click menu's "Move up / down a row".
+    const ctrls = el('div', 'bar-row-ctrls');
+    const rowBtn = (txt, title, target, disabled) => {
+      const b = el('button', 'bar-row-btn'); b.type = 'button'; b.textContent = txt; b.title = title;
+      if (disabled) b.disabled = true;
+      b.addEventListener('pointerdown', e2 => e2.stopPropagation());   // don't start a bar drag
+      b.addEventListener('click', e2 => { e2.stopPropagation(); if (!b.disabled) setEventRow(ev, target); });
+      return b;
+    };
+    ctrls.append(rowBtn('↑', 'Move up a row', ri - 1, ri <= 0), rowBtn('↓', 'Move down a row', ri + 1, false));
+    bar.appendChild(ctrls);
     bar.appendChild(el('div', 'resize'));
     attachTooltip(bar, ev);
     body.appendChild(bar);
@@ -369,18 +382,11 @@ function moveTooltip(e) {
   t.style.left = x + 'px'; t.style.top = y + 'px';
 }
 
-// ---- drag to move / resize / re-row --------------------------------------
-// Which row did the cursor land on within a lane body? Returns an index into the
-// lane's rows, or rows.length to mean "a new row below everything".
-function rowAtY(layout, offsetY) {
-  for (let i = 0; i < layout.rows.length; i++) {
-    if (offsetY < layout.rowY[i] + layout.rows[i].height) return i;
-  }
-  const last = layout.rows.length - 1;
-  const lastBot = layout.rowY[last] + layout.rows[last].height;
-  return offsetY > lastBot + ROW_GAP ? layout.rows.length : last;
-}
-
+// ---- drag to move / resize ------------------------------------------------
+// Dragging a bar is HORIZONTAL-ONLY: it moves dates (or resizes the end). It can
+// never change which row an event is on — that turned out to be too fragile (dates
+// drifted whenever someone nudged a bar up/down). Rows are changed deliberately via
+// the right-click menu's "Move up / down a row" buttons instead.
 function wireDrag() {
   const tl = $('timeline');
   tl.addEventListener('pointerdown', e => {
@@ -389,13 +395,11 @@ function wireDrag() {
     if (!bar || !state.unlocked) return;
     const ev = state.events.find(x => x.id === bar.dataset.id);
     if (!ev) return;
-    const body = bar.closest('.lane-body');
-    const layout = layoutLane(state.events.filter(x => x.department_id === ev.department_id));
     drag = {
-      bar, ev, body, layout, isResize: e.target.classList.contains('resize'),
-      startX: e.clientX, startY: e.clientY, moved: 0,
-      origLeft: parseFloat(bar.style.left), origTop: parseFloat(bar.style.top), origW: parseFloat(bar.style.width),
-      sDays: toDays(ev.start_date), eDays: toDays(ev.end_date), startRow: layout.rowOf[ev.id] ?? 0,
+      bar, ev, isResize: e.target.classList.contains('resize'),
+      startX: e.clientX, moved: 0,
+      origLeft: parseFloat(bar.style.left), origW: parseFloat(bar.style.width),
+      sDays: toDays(ev.start_date), eDays: toDays(ev.end_date),
     };
     bar.setPointerCapture(e.pointerId);
     bar.classList.add('dragging');
@@ -404,11 +408,11 @@ function wireDrag() {
   });
   tl.addEventListener('pointermove', e => {
     if (!drag) return;
-    const dx = e.clientX - drag.startX, dy = e.clientY - drag.startY;
-    drag.moved = Math.max(drag.moved, Math.abs(dx), Math.abs(dy));
-    if (drag.isResize) { drag.bar.style.width = Math.max(8, drag.origW + dx) + 'px'; return; }
-    drag.bar.style.left = (drag.origLeft + dx) + 'px';
-    drag.bar.style.top = (drag.origTop + dy) + 'px';   // follow vertically too (snaps to a row on drop)
+    const dx = e.clientX - drag.startX;
+    drag.moved = Math.max(drag.moved, Math.abs(dx));
+    // horizontal only — resize stretches the end, move slides the whole bar sideways
+    if (drag.isResize) drag.bar.style.width = Math.max(8, drag.origW + dx) + 'px';
+    else drag.bar.style.left = (drag.origLeft + dx) + 'px';
   });
   tl.addEventListener('pointerup', async e => {
     if (!drag) return;
@@ -416,17 +420,12 @@ function wireDrag() {
     d.bar.classList.remove('dragging');
     const deltaDays = Math.round((e.clientX - d.startX) / state.px);
     if (d.moved < 4) { openEditor(d.ev); return; }
-    if (d.ev.locked && !confirm(LOCK_MSG)) { render(); return; }   // revert the drag
     const payload = { ...d.ev };
-    if (d.isResize) {
-      payload.end_date = daysToISO(Math.max(d.sDays + 1, d.eDays + deltaDays));
-    } else {
-      payload.start_date = daysToISO(d.sDays + deltaDays);
-      payload.end_date = daysToISO(d.eDays + deltaDays);
-      // vertical move → pin to the row it was dropped on (only when it actually changed)
-      const targetRow = rowAtY(d.layout, e.clientY - d.body.getBoundingClientRect().top);
-      if (targetRow !== d.startRow) payload.row_index = targetRow;
-    }
+    if (d.isResize) payload.end_date = daysToISO(Math.max(d.sDays + 1, d.eDays + deltaDays));
+    else { payload.start_date = daysToISO(d.sDays + deltaDays); payload.end_date = daysToISO(d.eDays + deltaDays); }
+    const datesChanged = payload.start_date !== d.ev.start_date || payload.end_date !== d.ev.end_date;
+    if (!datesChanged) { render(); return; }                          // no real movement → snap back, no write
+    if (d.ev.locked && !confirm(LOCK_MSG)) { render(); return; }      // locked → confirm or revert
     await commitSave(payload);
   });
 }
@@ -869,9 +868,10 @@ function setZoom(delta) {
 
 // ---- boot -----------------------------------------------------------------
 async function reload() {
-  state.departments = await store.departments();
-  state.events = await store.events();
-  state.audit = await store.audit();
+  // Fetch in parallel — three sequential round-trips to Supabase added needless
+  // latency to every load/refresh.
+  [state.departments, state.events, state.audit] =
+    await Promise.all([store.departments(), store.events(), store.audit()]);
   applyLabelW();   // size the label column to the (possibly changed) department names
   // Bounds (and where "Not yet mapped" begins) follow the VISIBLE lanes only —
   // hidden departments shouldn't stretch the timeline past the last shown event.
